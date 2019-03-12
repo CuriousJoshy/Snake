@@ -375,7 +375,22 @@ const SNAKE_HEAD_COLOR = "#00FF00",
 
 const LEFT = 1, UP = 2, RIGHT = 3, DOWN = 4, DIRECTIONS = [LEFT,UP,RIGHT,DOWN];
 
-const DEFAULT = 0, UP_LEFT = 2, UP_RIGHT = 1, DOWN_LEFT = 3, DOWN_RIGHT = 4, LEFT_UP = 4, LEFT_DOWN = 1, RIGHT_UP = 3, RIGHT_DOWN = 2;
+function oppositeDirection(direction)
+{
+    return (direction + 2) % 4;
+}
+
+function unblockedDirections(x, y)
+{            
+    return DIRECTIONS.filter((direction) => {
+        return (direction == LEFT && !Grid.isOccupied(x - 1, y)) || 
+            (direction == RIGHT && !Grid.isOccupied(x + 1, y)) ||
+            (direction == UP && !Grid.isOccupied(x, y - 1)) ||
+            (direction == UP && !Grid.isOccupied(x, y + 1));
+    });
+}
+
+const DEFAULT = 0, UP_RIGHT = 1, LEFT_DOWN = 1, UP_LEFT = 2, RIGHT_DOWN = 2, DOWN_LEFT = 3, RIGHT_UP = 3, DOWN_RIGHT = 4, LEFT_UP = 4, BLOATED = 5;
 
 const SEGMENT_TYPES = {
     "1 1": DEFAULT,
@@ -414,6 +429,8 @@ var Snake = {
     turned: false,
     
     length: BASE_SIZE,
+    
+    bloatedSegment: 0,
 	deadSegments: 0,
 	    
     segments: [],
@@ -432,12 +449,12 @@ var Snake = {
 		
 		this.length = size;
 		this.segments.length = 0;
+        this.bloatedSegment = 0;
 		this.deadSegments = 0;
-		
+		        
 		for(var i = 0; i < size; i++)
 		{
-			this.tick = TIME_FRAME;
-			this.update();
+            Snake.update(true);
 		}
 	},
     
@@ -450,38 +467,62 @@ var Snake = {
         Mouse.changeLocation();
     },
     
-    moveHead: function()
+    moveHead: function(force)
     {        
         this.lastDirection = this.direction;
+        
+        let x = this.x, y = this.y;
         
         switch(this.nextDirection || this.direction)
         {
             case LEFT:
-                this.x--;
+                x--;
             break;
                 
             case RIGHT:
-                this.x++;
+                x++;
             break;
                 
             case UP:
-                this.y--;
+                y--;
             break;
                 
             case DOWN:
-                this.y++;
+                y++;
             break;
         }
         
         // The snake will wrap to the other side of the screen when reaching the boundaries 
-        if(this.x > CELLS_H - 1)
-            this.x = 0;
-        if(this.x < 0)
-            this.x = CELLS_H - 1;
-        if(this.y > CELLS_V - 1)
-            this.y = 0;
-        if(this.y < 0)
-            this.y = CELLS_V - 1;
+        if(x > CELLS_H - 1)
+            x = 0;
+        if(x < 0)
+            x = CELLS_H - 1;
+        if(y > CELLS_V - 1)
+            y = 0;
+        if(y < 0)
+            y = CELLS_V - 1;
+        
+        if(force || stateIs("playing"))
+        {
+            this.x = x;
+            this.y = y;
+        }
+        else if(stateIs("start"))
+        {
+            let cell = Grid.retrieve(x, y);
+            
+            if(cell == Mouse || isSegment(cell))
+            {
+                currentState.changeSnakeDirection();
+                
+                this.moveHead();
+            }
+            else
+            {
+                this.x = x;
+                this.y = y;
+            }
+        }
         
         if(this.nextDirection)
         {
@@ -507,15 +548,17 @@ var Snake = {
         }
     },
     
-    update: function()
+    update: function(force)
     {
         let updateTime = Math.max(TIME_FRAME / (BASE_SPEED + (this.length) * SPEED_GROWTH), 1); 
         
-		if(stateIs("playing") || stateIs("start"))
+        let isPlaying = stateIs("playing"), isStart = stateIs("start");
+        
+		if(isPlaying || isStart)
 		{
 			let listeners = keys;
 			
-			if(stateIs("start"))
+			if(isStart)
 				listeners = psuedoKeys;
 			
 			if((listeners.a || listeners.arrowleft) && this.direction != RIGHT)
@@ -531,13 +574,13 @@ var Snake = {
 			this.turned = this.lastDirection != this.nextDirection;
         }
 		
-        if(++this.tick >= updateTime)
+        if(force || ++this.tick >= updateTime)
         {
             this.moveSegments();
-            this.moveHead();
+            this.moveHead(force);
             
-			if(stateIs("playing"))
-			{
+			if(isPlaying)
+			{                
 				let cell = Grid.retrieve(this.x, this.y);
 				
 				if(cell == Mouse)
@@ -613,7 +656,7 @@ var Snake = {
         ctx.restore();
     },
     
-    drawSegment: function(x, y, type, color)
+    drawSegment: function(x, y, type, color, bloated)
     {
         x = convert(x);
         y = convert(y);
@@ -685,7 +728,7 @@ var Snake = {
 			if(i === 0 && type == DEFAULT)
 				this.drawTail(segment.x, segment.y, segment.direction, color);
 			else
-				this.drawSegment(segment.x, segment.y, type, color);
+				this.drawSegment(segment.x, segment.y, type, color, true);
         }
         
         this.drawHead(this.x, this.y, this.direction);
@@ -714,7 +757,10 @@ function isSegment(object)
     return object instanceof Segment;
 }
 
+
 // Create the Food object
+/*
+- Obsolete due to Mouse being used instead remaining only for archiving purposes
 
 const FOOD_COLORS = ["red", "blue", "purple", "orange"], MAX_MOVE_ATTEMPTS = 1000;
 
@@ -774,10 +820,12 @@ var Food = {
         ctx.fill();
     }
 };
+*/
 
 // Create the Mouse object
 
-const MOUSE_BODY_COLOR = "#C0C0C0", MOUSE_EYE_COLOR = "#ff0000", MOUSE_TAIL_COLOR = "#FF1493";
+const MOUSE_BODY_COLOR = "#C0C0C0", MOUSE_EYE_COLOR = "#FF0000", MOUSE_TAIL_COLOR = "#FF1493",
+MOUSE_MOVE_DELAY = 35, MOUSE_MIN_MOVES = 3, MOUSE_MAX_MOVES = 6;
 
 var Mouse = {
 	x: 0,
@@ -785,7 +833,8 @@ var Mouse = {
 	tick: 0,
 	
 	directionChangeDelay: 120,
-	moveDelay: 40,
+    
+    movesLeft: MOUSE_MIN_MOVES,
 	
 	changeLocation: function()
 	{
@@ -811,10 +860,27 @@ var Mouse = {
 	
 	changeDirection: function()
 	{
-		this.direction = randItem(DIRECTIONS);
+        let directions = unblockedDirections(this.x, this.y);
         
-        if(!this.tryMove())
-            this.changeDirection();
+        if(directions.length == 0)
+            return;
+        else if(directions.length == 1)
+            this.direction = directions[0];
+        else
+        {    
+            let direction = randItem(directions);
+            
+            if(oppositeDirection(direction) == this.direction)
+                return this.changeDirection();
+                
+            this.direction = direction;
+            
+            this.movesLeft = randInt(MOUSE_MIN_MOVES, MOUSE_MAX_MOVES + 1);
+            this.tick = 0;
+            
+            if(!this.tryMove())
+                this.changeDirection();
+        }
 	},
     
     tryMove: function()
@@ -881,18 +947,14 @@ var Mouse = {
 	
 	update: function()
 	{
-		if(this.tick > 0)
+		if(this.tick > Math.max(MOUSE_MOVE_DELAY - Snake.length / 6, 20))
 		{
-            let scale = Math.floor(Snake.length / 9);
+            if(--this.movesLeft !== 0)
+                this.move();
+            else
+                this.changeDirection();
             
-			if(this.tick % Math.floor(this.directionChangeDelay - scale, 60) === 0)
-			{
-				this.changeDirection();
-			}
-			else if(this.tick % Math.max(this.moveDelay - scale, 20) == 0)
-			{
-				this.move();
-			}
+            this.tick = 0;
 		}
 		
 		this.tick++;
@@ -970,7 +1032,7 @@ addState("start", {
 	
 	directions: ["w","a","s","d"],
 	
-	directionChangeDelay: 60,
+	directionChangeDelay: 30,
 	
 	keys: {
 		enter: "countdown"
@@ -980,15 +1042,15 @@ addState("start", {
 	{
 		this.tick = 0;
 		
-		Snake.reset(Math.floor(CELLS_H * 0.5));
+		Snake.reset(Math.floor(CELLS_H * 0.75));
 		Scoreboard.reset();
 		
 		Mouse.changeLocation();
 	},
 	
-	changeDirection: function()
+	changeSnakeDirection: function()
 	{
-		let key = randItem(this.directions);
+		let key = this.directions[randItem(unblockedDirections(Snake.x, Snake.y))];
 		
 		if(key == this.direction)
 			this.changeDirection()
@@ -1000,7 +1062,7 @@ addState("start", {
 	{		
 		if(++this.tick > this.directionChangeDelay)
 		{
-			this.changeDirection();
+			this.changeSnakeDirection();
 			
 			this.tick = 0;
 		}
