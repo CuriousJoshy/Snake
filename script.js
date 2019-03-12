@@ -369,7 +369,7 @@ const SNAKE_HEAD_COLOR = "#00FF00",
     SNAKE_GAMEOVER_COLOR = "#808080",
 	BASE_SIZE = 5, 
 	SIZE_GROWTH = 3,
-	TIME_FRAME = 180,
+	TIME_FRAME = 150,
 	BASE_SPEED = 10, 
 	SPEED_GROWTH = 0.25;
 
@@ -550,7 +550,7 @@ var Snake = {
     
     update: function(force)
     {
-        let updateTime = Math.max(TIME_FRAME / (BASE_SPEED + (this.length) * SPEED_GROWTH), 1); 
+        let updateTime = Math.max(TIME_FRAME / (BASE_SPEED + this.length * SPEED_GROWTH), 1); 
         
         let isPlaying = stateIs("playing"), isStart = stateIs("start");
         
